@@ -72,3 +72,4 @@ model.fit(X_train, Y_train, batch_size=32, nb_epoch=5, verbose=1)
 loss, accuracy = model.evaluate(X_test, Y_test, verbose=0)
  
 print("Accuracy = {:.3f}".format(accuracy))
+# Accuracy = 0.992
