@@ -8,4 +8,4 @@ Prerequisites:
 - Keras (https://keras.io/)
 
 Projects:
-1. CNN for recognizing MNIST handwritten digits 
+1. CNN for recognizing MNIST handwritten digits (keras_mnist.py)
