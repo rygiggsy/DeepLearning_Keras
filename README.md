@@ -11,4 +11,4 @@ Prerequisites:
 Projects:
 - 1. CNN for recognizing MNIST handwritten digits (keras_mnist.py)
 - 2. Single Layer NN for classifying iris flower dataset (keras_cnn_iris.py) 
-- 3. Simple CNN for 
+- 3. LSTM for Time Series International Airline Passengers prediction (keras_lstm_airline.py)
