@@ -1,0 +1,202 @@
+'''
+Trains a RNN-LSTM on the International Airline Passengers prediction problem dataset.
+
+Dataset:
+Given a year and a month, the task is to predict the number of international airline passengers in units of 1,000. 
+The data ranges from January 1949 to December 1960, or 12 years, with 144 observations.
+Link: (https://datamarket.com/data/set/22u3/international-airline-passengers-monthly-totals-in-thousands-jan-49-dec-60#!ds=22u3&display=line)
+
+Approach:
+The Long Short-Term Memory network, or LSTM network, is a recurrent neural network that is trained using Backpropagation Through Time 
+and overcomes the vanishing gradient problem.
+As such, it can be used to create large recurrent networks that in turn can be used to address difficult sequence problems in machine 
+learning and achieve state-of-the-art results.
+Instead of neurons, LSTM networks have memory blocks that are connected through layers.
+
+Results:
+- Basic LSTM
+Window = 1 (lookback parm)
+After 100 epochs
+Train Score: 22.78 RMSE
+Test Score: 47.25 RMSE 
+
+- LSTM with Window (x prior times as input variables)
+Window = 3
+After 100 epochs
+Train Score: 27.65 RMSE
+Test Score: 68.82 RMSE
+
+- LSTM with Timestep (x prior times as input variables)
+W time_step
+Window = 3
+Train Score: 28.02 RMSE
+Test Score: 61.59 RMSE
+
+- Stacked LSTM with Memory between Batches
+W Stacked & time_step
+lookback = 3
+stacked_loop = 500 (i parm )
+Train Score: 18.88 RMSE
+Test Score: 58.31 RMSE
+
+> stacked_loop = 100 (i parm )
+> Train Score: 25.15 RMSE
+> Test Score: 63.57 RMSE
+'''
+
+import numpy as np
+import math
+import pandas
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Activation, Flatten, LSTM
+from keras.layers import Convolution2D, MaxPooling2D
+from keras.utils import np_utils
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from matplotlib import pyplot as plt
+from sklearn.cross_validation import train_test_split
+
+# convert an array of values into a dataset matrix
+def create_dataset(dataset, look_back=1):
+	dataX, dataY = [], []
+	for i in range(len(dataset)-look_back-1):
+		a = dataset[i:(i+look_back), 0]
+		dataX.append(a)
+		dataY.append(dataset[i + look_back, 0])
+	return np.array(dataX), np.array(dataY)
+
+np.random.seed(123)  # for reproducibility
+
+nb_epoch = 100
+batch_size = 1
+look_back = 3
+time_step = True # True False
+stacked = True # True False
+# Load the dataset
+data_all = pandas.read_csv('international-airline-passengers.csv', usecols=[1], engine='python', skipfooter=3)
+
+
+#====== Initial Sanity Check ======
+plt.plot(data_all)
+plt.show()
+plt.ylabel('Passengers (1,000)')
+plt.xlabel('Years')
+# create a grid of 3x3 images
+#for i in range(0, 9):
+#	plt.subplot(330 + 1 + i)
+#	plt.imshow(toimage(X_train[i]))
+#	plt.title("Class {}".format(y_train[i]))
+# show the plot
+#plt.show()
+
+#====== Preprocess Data ======
+
+data_all = data_all.values
+data_all = data_all.astype('float32')
+
+#LSTMs are sensitive to the scale of the input data, specifically when the sigmoid (default) or tanh activation functions are used. 
+scaler = MinMaxScaler(feature_range=(0, 1))
+data_all = scaler.fit_transform(data_all)
+
+# split into train and test sets
+train_size = int(len(data_all) * 0.67)
+test_size = len(data_all) - train_size
+train, test = data_all[0:train_size,:], data_all[train_size:len(data_all),:]
+#print(len(train), len(test))
+#====== Preprocess Data Labels ======
+
+X_train, Y_train = create_dataset(train, look_back)
+X_test, Y_test = create_dataset(test, look_back)
+print(X_train.shape, 'train samples')
+print(X_test.shape, 'test samples')
+
+# The LSTM network expects the input data (X) to be provided with a specific array structure in the form of: [samples, time steps, features].
+# Currently, our data is in the form: [samples, features] and we are framing the problem as one time step for each sample.
+# Use numpy.reshape() to transform into [samples, time steps, features]
+if not time_step:
+    print('Not using data time_step.')
+    X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
+    X_test = np.reshape(X_test, (X_test.shape[0], 1, X_test.shape[1]))
+    input_dim_parm = look_back
+else:
+    print('Using time_step option.')
+    X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+    input_dim_parm = 1
+#====== Model ======
+# LSTM Network for Regression
+# The input shape parameter should be the shape of 1 sample. In this case, it's the same (3, 32, 32) that corresponds to  the (depth, width, height) of each digit image.
+# Convolution1: 32, 3x3, filters
+# Convolution2: 32, 3x3, filters
+# MaxPooling2D: to reduce the number of parameters in our model by sliding a 2x2 pooling filter across the previous layer and taking the max of the 4 values in the 2x2 filter.
+# Dropout: Regularization to prevent overfitting. In practice, the value of dropout ratio p=0.5 is a reasonable default, but this can be tuned on validation data.
+# Flattens the input
+# Output layer = 10 since we have 10 classes
+model = Sequential()
+
+if not stacked:
+    model.add(LSTM(4, input_dim=input_dim_parm)) #non-stacked 
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer='adam')                
+    model.fit(X_train, Y_train,
+              batch_size=batch_size,
+              nb_epoch=nb_epoch,
+              validation_data=(X_test, Y_test),
+              shuffle=True,
+              verbose=2)   
+    # make predictions
+    trainPredict = model.predict(X_train)
+    testPredict = model.predict(X_test)
+else:
+    model.add(LSTM(4, batch_input_shape=(batch_size, look_back, 1), stateful=True, return_sequences=True)) # Stacked    
+    model.add(LSTM(4, batch_input_shape=(batch_size, look_back, 1), stateful=True)) # Stacked
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    for i in range(nb_epoch):
+        print('Epoch', i, '/', nb_epoch)
+	model.fit(X_train, Y_train, nb_epoch=1, batch_size=batch_size, verbose=2, shuffle=False)
+	model.reset_states()
+    # make predictions
+    trainPredict = model.predict(X_train, batch_size=batch_size)
+    model.reset_states()
+    testPredict = model.predict(X_test, batch_size=batch_size)
+#model.add(Dense(1))
+#print model.output_shape
+# now: model.output_shape == (None, 32, 26, 26)
+
+#model.add(Dense(64, activation='relu'))
+#model.add(Dropout(0.25))
+
+              
+
+
+# invert predictions
+trainPredict = scaler.inverse_transform(trainPredict)
+trainY = scaler.inverse_transform([Y_train])
+testPredict = scaler.inverse_transform(testPredict)
+testY = scaler.inverse_transform([Y_test])
+
+# calculate root mean squared error
+trainScore = math.sqrt(mean_squared_error(trainY[0], trainPredict[:,0]))
+print('Train Score: %.2f RMSE' % (trainScore))
+testScore = math.sqrt(mean_squared_error(testY[0], testPredict[:,0]))
+print('Test Score: %.2f RMSE' % (testScore))
+
+# shift train predictions for plotting
+trainPredictPlot = np.empty_like(data_all)
+trainPredictPlot[:, :] = np.nan
+trainPredictPlot[look_back:len(trainPredict)+look_back, :] = trainPredict
+# shift test predictions for plotting
+testPredictPlot = np.empty_like(data_all)
+testPredictPlot[:, :] = np.nan
+testPredictPlot[len(trainPredict)+(look_back*2)+1:len(data_all)-1, :] = testPredict
+
+# plot baseline and predictions
+plt.plot(scaler.inverse_transform(data_all), label="Original")
+plt.plot(trainPredictPlot, label="trainPredictPlot")
+plt.plot(testPredictPlot, label="testPredictPlot")
+# Place a legend to the right of this smaller subplot.
+plt.legend(loc=4)
+plt.ylabel('Passengers (1,000)')
+plt.xlabel('Years')
+plt.show()
